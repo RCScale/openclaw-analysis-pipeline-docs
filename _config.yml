@@ -1,0 +1,21 @@
+# Jekyll configuration for the OpenClaw analysis pipeline docs site.
+# Rendered automatically by GitHub Pages -- no build step required.
+title: "OpenClaw Analysis Pipeline"
+description: "Repeatable pipeline for turning OpenClaw project data into shareable dashboards."
+theme: jekyll-theme-cayman
+show_downloads: false
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter: rouge
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: true
+include:
+  - README.md
+  - HANDOFF.md
+  - HANDOFF_TECHNICAL.md
+  - ONBOARDING.md

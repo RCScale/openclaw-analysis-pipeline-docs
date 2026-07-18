@@ -1,0 +1,242 @@
+# =============================================================================
+# Queue config template -- copy to queues/<project_id>.yaml and fill in.
+#
+# This file is the single source of truth for everything project-specific in
+# the analysis pipeline. Once it is filled in, you can run the whole pipeline
+# end-to-end via:
+#
+#     python3 -m analysis.run_all --queue queues/<project_id>.yaml
+#
+# Fields marked REQUIRED throw a clear error from pipeline.lib.config.Queue.load
+# when missing. Fields marked OPTIONAL fall back to the documented default.
+#
+# Reference implementation: queues/698318a45989d90bf44b9b53.yaml (OpenClaw
+# chatv2). When in doubt, copy that file and edit per-project values.
+# =============================================================================
+
+
+# REQUIRED. The 24-char Mongo ObjectID of the project in the warehouse. Used
+# in every Snowflake filter (ta.project = '<id>'), every cache key prefix, and
+# the per-project filesystem path reports/<project_id>/. Find it via:
+#
+#     SELECT _id, name FROM projects WHERE name ILIKE '%<project name>%'
+#
+project_id: "REPLACE_ME_WITH_24_CHAR_OBJECTID"
+
+# OPTIONAL (defaults to project_id). Human-readable name shown in dashboard
+# titles + the site header.
+display_name: "REPLACE_ME (queue <project_id>)"
+
+
+# REQUIRED. Time bounds for the analysis. The Q-A..Q-E diagnose queries filter
+# attempts to those that happened within `days` of "now". A smaller window =
+# faster pulls + smaller CSVs; a larger window = more statistical power for
+# Goal-4 PDR analysis.
+analysis_window:
+  # REQUIRED. Calendar-day lookback. Most projects: 60. Long-running projects
+  # with few weekly attempts: try 90 or 120.
+  days: 60
+  # OPTIONAL (default 5). Hard cap on Q-C size: at most N most-recent attempts
+  # per (worker, level) within the window. The promotion FSM only needs the
+  # last few scored events for the "two consecutive 4s" streak; 5 covers it
+  # comfortably and keeps the CDS pull from blowing up on prolific workers.
+  recent_attempts_per_worker_per_level: 5
+
+
+# OPTIONAL (default empty). Emails to drop from every analysis. Use this for
+# system / service-account users that show up in attempts but aren't humans.
+exclude_emails:
+  - "scale@scale.com"
+
+
+# REQUIRED. ILIKE patterns (note: Snowflake ILIKE, NOT regex; % is the
+# wildcard) that identify "team member / contractor" emails. Used in the
+# pipeline.diagnose team-membership probe + the Goal-1 last-toucher filter.
+# Must contain at least one pattern.
+#
+# Examples:
+#   "%+worker@contractors.scale.com"   -- sub-addressed team accounts
+#   "%outlier.ai"                       -- Outlier contractors
+#   "mila.%@%"                          -- specific named teams (use @ to
+#                                          avoid matching milan/milad/...)
+team_email_patterns:
+  - "%+worker@contractors.scale.com"
+  - "%outlier.ai"
+
+
+# REQUIRED. The courses gating this project's funnel. Find them with:
+#
+#     SELECT _id AS course_id, title
+#     FROM coursev2
+#     WHERE _id IN (
+#       SELECT DISTINCT course_id FROM courseprogressv2
+#       WHERE project = '<your project_id>'
+#     );
+#
+# Group them by stage. Onboarding courses gate "is the worker allowed to
+# attempt tasks at all". The reviewer course gates "is the worker allowed
+# to be promoted to L1 reviewer". Supplementary courses don't gate but are
+# included in the Goal-3 psychometrics + Goal-4 PDR analyses.
+courses:
+  # OPTIONAL (default empty). Onboarding courses (zero or more).
+  onboarding:
+    - id: "REPLACE_ME_COURSE_ID"
+      title: "REPLACE_ME_COURSE_TITLE"
+  # REQUIRED. The single reviewer-promotion-gating course. There is exactly
+  # one per project.
+  reviewer:
+    id: "REPLACE_ME_REVIEWER_COURSE_ID"
+    title: "REPLACE_ME_REVIEWER_COURSE_TITLE"
+  # OPTIONAL (default empty). Other relevant courses (e.g. quality modules).
+  supplementary: []
+
+
+# REQUIRED. The "anchor tags" the project applies to workers. These drive
+# Goal-1 last-toucher detection + Goal-4 PDR tag-separation analysis.
+#
+# There is NO tag-name table in the warehouse, so YOU must supply the
+# human-readable names. Find tag IDs with:
+#
+#     SELECT _id, name FROM tags WHERE name ILIKE '%<project hint>%';
+#
+tags:
+  # REQUIRED. The "trusted reviewer / promotion-gate" tag. Workers carrying
+  # this tag are treated as the project's reviewer pool for last-toucher
+  # analysis. analysis.run_g4_pdr uses this as the "known-good" cohort.
+  reviewer:
+    id: "REPLACE_ME_TRUSTED_REVIEWER_TAG_ID"
+    name: "REPLACE_ME_TRUSTED_REVIEWER_TAG_NAME"
+  # OPTIONAL (default empty). Tags the project applies to flag low-quality /
+  # bad-actor workers. run_g4_pdr uses quality_negative[0] as the "known-bad"
+  # cohort for tag-separation; run_g4_traits correlates EVERY tag with PDR
+  # so the order here only matters for that one tag-separation comparison.
+  quality_negative: []
+
+
+# REQUIRED. Review-level integer mapping. In the warehouse,
+# taskattempts.level is an integer where -1 = annotator, 0 = first review,
+# 1 = verification. Some projects use different conventions.
+#
+# Tip: probe with `python3 exploration/run_phase1.py --project-id <pid>` to
+# see the actual level distribution for your project.
+review_levels:
+  # REQUIRED. The level your annotators submit at. Usually "-1".
+  annotator: "-1"
+  # REQUIRED. The level your L1 reviewers grade at. Usually "0".
+  l1_review: "0"
+  # REQUIRED. The level your L2 verifiers grade at. Usually "1".
+  l2_verification: "1"
+  # OPTIONAL (default empty). Levels we ignore in everything. Informational
+  # only -- the SQL filters explicitly to (annotator, l1_review,
+  # l2_verification) so anything not in those three keys is dropped anyway.
+  ignore: []
+
+
+# REQUIRED. The promotion FSM. Customize per project policy.
+promotion:
+  # REQUIRED. How an annotator becomes an L1 reviewer.
+  reviewer_promotion:
+    # REQUIRED. Which QM field carries the score. Almost always
+    # "quality_overall_qms" -- the rest of the analysis pipeline assumes
+    # this name in its column-extraction code.
+    score_field: "quality_overall_qms"
+    # REQUIRED. Minimum score to count as "passing" for the streak. Most
+    # projects use 4 (i.e. accept_as_is or accept_with_minor_fixes).
+    threshold: 4
+    # REQUIRED. How many consecutive >=threshold reviews are needed.
+    consecutive: 2
+    # REQUIRED. Scope of the streak. Currently only "per_worker_per_queue_per_level"
+    # is supported.
+    scope: "per_worker_per_queue_per_level"
+
+  # REQUIRED. How an L1 reviewer becomes a last-toucher.
+  last_toucher_promotion:
+    # REQUIRED. Only "tag" is currently supported. Ops applies the
+    # tags.reviewer tag manually as the source of truth; we don't try to
+    # reverse-engineer team-verification from the QM chain.
+    source: "tag"
+    # REQUIRED. YAML dotted reference to the tag ID that gates the promotion.
+    # Currently must be exactly "tags.reviewer.id".
+    tag_id_ref: "tags.reviewer.id"
+
+
+# REQUIRED. Map OpenClaw / multi-step task JSON step types to the analysis
+# fields we extract from each step's output. This is project-specific
+# because different OpenClaw module versions emit different step type names.
+#
+# Reference: queues/698318a45989d90bf44b9b53.yaml has the canonical
+# OpenClaw chatv2 step map. For a new OpenClaw project, copy that map
+# verbatim unless your project uses a custom module set.
+#
+# See exploration/JSON_STEP_MAP.md for the full inventory of step types
+# observed across the warehouse.
+json_step_map:
+  prompt:
+    by_type: "PromptInput"
+    output_field: "content"
+  task_spec:
+    by_type: "TextCollection"
+    output_fields:
+      - "agent_objective"
+      - "desired_outcome"
+      - "core_functionalities"
+      - "build_complexity"
+      - "assigned_universe"
+      - "source_platform"
+      - "source_url"
+      - "zip_folder"
+  environment:
+    by_type: "OpenClawEnvironment"
+    output_fields:
+      - "environmentUrl"
+      - "workspaceFilesUrl"
+      - "agentEnvSnapshotArtifactId"
+      - "traceUrl"
+      - "trajectory"
+      - "trajectories"
+  agent_execution:
+    by_type: "AgentExecution"
+    output_fields:
+      - "conversationHistory"
+      - "trajectory"
+      - "originalTrajectory"
+  rubric:
+    builder_by_type: "RubricCriteriaBuilder"
+    builder_output_field: "criteria"
+    rating_by_type: "RubricCriteriaRating"
+    rating_output_fields:
+      - "candidates"
+      - "responseRatings"
+    viewer_by_type: "RubricEvaluationViewer"
+    viewer_output_field: "evaluations"
+  quality_measurement:
+    by_type: "QualityMeasurement"
+    content_path: "output.content"
+    required_field: "quality_overall_qms"
+    fields:
+      - "quality_overall_qms"
+      - "review_decision"
+      - "quality_feedback"
+      - "rubrics_quality_rating"
+      - "rubrics_quality_reason"
+      - "trajectories_quality_rating"
+      - "trajectories_quality_reason"
+      - "enable_enriched_feedback"
+  candidates:
+    output_field: "candidates"
+
+
+# REQUIRED. How to reach Snowflake through Redash.
+warehouse:
+  # REQUIRED. Redash data_source_id pointing at the Scale Snowflake account.
+  # Almost always 22. Verify with:
+  #     curl -s "https://redash.scale.com/api/data_sources?api_key=<key>" \
+  #       | python3 -m json.tool | grep -i snowflake
+  data_source_id: 22
+  # REQUIRED. The view we join on to pull CDS responses (RESPONSE / VARIANT
+  # blobs). Used by pipeline.lib.cds. For OpenClaw projects this is
+  # "VIEW.CDS_CHAT_TASK_ATTEMPT_RESPONSES".
+  cds_view: "VIEW.CDS_CHAT_TASK_ATTEMPT_RESPONSES"
+  # REQUIRED. Column in that view we join on. Always "task_attempt_id" for
+  # OpenClaw.
+  cds_join_key: "task_attempt_id"
