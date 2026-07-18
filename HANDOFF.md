@@ -7,13 +7,14 @@ project into a public-shareable set of dashboards that answer four
 operational questions:
 
 1. **Workers** — who is stuck in the funnel, who is producing defects,
-   what traits predict a low defect rate?
-2. **Reviewers** — which reviewers can be trusted to grade work? Which
-   should be dropped?
-3. **Courses** — which courses' questions are actually predictive of
-   downstream production quality, and which are counterproductive?
+   which traits predict a low defect rate?
+2. **Reviewers** — which reviewers can be trusted to grade work, which
+   should be dropped from the trust pool?
+3. **Courses** — which courses are net-helpful vs net-harmful in
+   aggregate, and which frequent worker mistakes are missing from the
+   curriculum entirely?
 4. **Questions** — which specific course questions to rewrite, remove,
-   or keep, with the full question text + correct answer inline.
+   or keep, with the full question text and correct answer inline.
 
 The pipeline has run end-to-end for one project (`OpenClaw chatv2`,
 `698318a45989d90bf44b9b53`) and been configured for a second
@@ -36,36 +37,37 @@ For each project, running the pipeline end-to-end produces:
 - **A redacted static-site build** under `pages_build/` that hashes out
   worker emails + Mongo IDs so the output is safe to publish externally.
 - **A per-project archive path** (`archive/<project_id>/`) so switching
-  between projects is a snapshot-and-restore operation, not a rebuild.
+  between projects is a snapshot-and-restore operation with no
+  re-run of the LLM audit steps.
 
 ## What is unique about this pipeline
 
-- **LLM-as-auditor on the reviewer feedback itself.** For every sampled
+- **LLM auditor on reviewer feedback itself.** For every sampled
   review, an LLM sub-agent (Claude Opus, `--effort max`) reads the
-  prompt + rubric + worker deliverable + reviewer feedback, then judges
-  every claim in the feedback as `defensible` / `questionable` /
-  `unjustified`. Reviewers whose majority of audited feedback comes back
-  unjustified are dropped from the trust pool.
+  prompt, rubric, worker deliverable, and reviewer feedback, then
+  judges every claim in the feedback as `defensible` / `questionable`
+  / `unjustified`. Reviewers whose majority of audited feedback comes
+  back unjustified are dropped from the trust pool.
 - **Trust-weighted PDR.** The per-worker outcome metric is
   Performance Defect Rate — the fraction of a worker's last 3 trusted
   reviews scoring below the promotion gate (QM &lt; 4). Reviews from
-  dropped reviewers are excluded before this is computed.
-- **Two-axis cross-validation.** Every predictive/counterproductive
-  question flag is checked against a second, independent axis: the
-  platform's pre-existing `trusted_reviewer` and `bad_quality` worker
-  tags. Questions where the two axes agree are double-confirmed;
-  questions where they disagree are candidates for manual re-audit.
-- **Version-history recovery.** Questions that have been *removed*
-  from the live course definition are still recovered from
+  dropped reviewers are excluded before this metric is computed.
+- **Two-axis cross-validation.** Every predictive-or-counterproductive
+  question flag is cross-checked against a second axis: the platform's
+  `trusted_reviewer` and `bad_quality` worker tags. Agreements
+  double-confirm the flag; disagreements surface as manual re-audit
+  candidates.
+- **Version-history recovery.** Questions removed from the live course
+  definition are recovered from
   `PUBLIC_W_DELETED.COURSEV2VERSIONHISTORIES` and stamped
-  `deprecated=true` in the output, so operators know at a glance which
-  problem questions are already resolved and which still need action.
+  `deprecated=true` in the output, so operators can distinguish
+  resolved problems from open ones.
 - **LLM per-question diagnosis.** For every question flagged as
   predictive or counterproductive, a second LLM pass reads the
-  question text + sample worker answers + grader hints, then classifies
-  the root cause (answer-key broken, trait misalignment, prompt
-  ambiguity, noise) and recommends `keep` / `rewrite` / `remove` /
-  `investigate_grader`.
+  question text, sample worker answers, and grader hints, then
+  classifies the root cause (`answer_key_broken` / `trait_misalignment`
+  / `prompt_ambiguous` / `noise_or_low_signal` / `genuinely_predictive`)
+  and recommends `keep` / `rewrite` / `remove` / `investigate_grader`.
 
 ## What is in place vs known limitations
 
@@ -92,36 +94,37 @@ For each project, running the pipeline end-to-end produces:
 
 ### Known limitations (in priority order)
 
-- **Derived artifacts are not project-namespaced.** Files under
+- **Derived artifacts are global, not project-namespaced.** Files under
   `analysis/g*_*.csv`, `analysis/audit_outputs/`, and
   `analysis/visualize/` are shared across projects; switching queues
-  overwrites the previous project's output. Workaround today: the
+  overwrites the previous project's output. Today's workaround: the
   `archive_project.sh` script snapshots to `archive/<project_id>/`
-  before switching. Long-term fix: move to `artifacts/<project_id>/`
-  workspaces (~2 days of work; see `HANDOFF_TECHNICAL.md` §5).
-- **Cache invalidation is mtime-only.** Reruns detect stale outputs
-  by comparing mtime against input mtimes. This misses semantic
-  changes (e.g. editing the queue YAML to add a course, without
-  touching a CSV, does not automatically invalidate downstream
-  outputs). Three recent fix commits (`a1c566c`, `db7224a`, `e9f8e0d`)
+  before switching. Long-term fix: move every derived artifact to
+  `artifacts/<project_id>/` (~2 days of work; see
+  `HANDOFF_TECHNICAL.md` §5).
+- **Cache invalidation is mtime-only.** Reruns compare output mtime
+  against input mtimes. This misses semantic changes — editing the
+  queue YAML to add a course without touching a CSV leaves downstream
+  outputs stale. Three fix commits (`a1c566c`, `db7224a`, `e9f8e0d`)
   patched specific symptoms of this pattern.
 - **The `SCALE_DASHBOARD_*` cookies rotate every ~24 hours.** CDS
-  payload downloads (used by G2 phase-b audits + env-coverage) fail
-  with HTTP 401 when the JWT expires. Manual refresh required; there
-  is no automatic re-auth path.
-- **LLM caches are not project-namespaced.** Per-attempt audit
-  outputs at `analysis/audit_outputs/<attempt_id>.json` don't carry
-  a project ID prefix. If two projects ever share an attempt ID (rare
-  but possible), the audit from one would be reused for the other.
-- **Presentation builders don't take `--queue`.** `build_themes.py`,
-  `build_summary.py`, and `build_g4_dashboard.py` read whatever
-  `analysis/g4_*.csv` is on disk. Combined with the non-namespaced
-  outputs above, this is why the archive-and-restore pattern exists.
+  payload downloads (used by G2 phase-b audits and env-coverage)
+  return HTTP 401 when the JWT expires. Refresh is manual; there is
+  no automatic re-auth path.
+- **LLM caches are keyed by attempt ID, not project ID.** Per-attempt
+  audit outputs at `analysis/audit_outputs/<attempt_id>.json` carry
+  no project ID prefix. If two projects share an attempt ID (rare in
+  practice), the audit from the first project will be reused for the
+  second.
+- **Presentation builders do not accept `--queue`.**
+  `build_themes.py`, `build_summary.py`, and `build_g4_dashboard.py`
+  read whatever `analysis/g4_*.csv` is on disk. Combined with the
+  global-derived-artifacts pattern above, this is why the
+  archive-and-restore workflow exists.
 - **Cost surface is high on a fresh run.** ~$365 in Claude API calls
   per fresh project (see cost breakdown in `HANDOFF_TECHNICAL.md`
-  §4). LLM steps have per-attempt or per-question caches, so re-runs
-  after data refresh are cheaper (~$0-$30 depending on what
-  changed).
+  §4). LLM steps have per-attempt or per-question caches, so refreshes
+  after new data land cost $0–$30 depending on what changed.
 
 ## Where to go from here
 
@@ -134,11 +137,11 @@ For each project, running the pipeline end-to-end produces:
   `archive/698318a45989d90bf44b9b53/`. Restore via
   `rsync -av archive/698318a45989d90bf44b9b53/ ./` and re-run
   `analysis.run_all` with the chatv2 queue.
-- **To operate the pipeline as a scheduled refresh**: currently no
-  scheduler. `analysis.run_all` is invoked manually. A weekly refresh
-  loop is straightforward to add (write a cron / GitHub Action wrapper
-  around `analysis.run_all` + `git push` from the `pages_build`
-  submodule).
+- **To operate the pipeline as a scheduled refresh**: today
+  `analysis.run_all` is invoked manually. A weekly loop needs a cron
+  or GitHub Action wrapper around `analysis.run_all` +
+  `analysis.build_for_pages` + `git push` from the `pages_build`
+  submodule.
 
 ## Directory reference
 

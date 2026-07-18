@@ -4,10 +4,14 @@ A repeatable pipeline that turns raw warehouse data about an OpenClaw
 project into a public-shareable set of dashboards, answering four
 operational questions:
 
-- **Workers** — who's stuck, who's producing defects, what traits predict low defect rate?
-- **Reviewers** — who can be trusted to grade work, who should be dropped?
-- **Courses** — which questions predict downstream production quality, which are counterproductive?
-- **Questions** — which specific course questions to rewrite, remove, or keep?
+- **Workers** — who is stuck in the funnel, who is producing defects,
+  which traits predict a low defect rate?
+- **Reviewers** — which reviewers can be trusted to grade work, which
+  should be dropped from the trust pool?
+- **Courses** — which courses are net-helpful vs net-harmful, and
+  which frequent mistakes are missing from the curriculum entirely?
+- **Questions** — which specific course questions to rewrite, remove,
+  or keep (with the full question text and correct answer inline)?
 
 ## Start here
 
@@ -58,21 +62,26 @@ pages_build/     redacted public mirror (separate git repo)
 
 ## What makes this pipeline unique
 
-- **LLM auditor on reviewer feedback itself** — every claim in a
+- **LLM auditor on reviewer feedback itself.** Every claim in a
   reviewer's free-text feedback gets a `defensible` / `questionable`
   / `unjustified` verdict before their reviews are trusted downstream.
-- **Trust-weighted PDR** — worker outcome is the fraction of last 3
-  trusted reviews scoring below the promotion gate. Untrusted
-  reviewers filtered out before the metric is computed.
-- **Two-axis cross-validation** — every question flag double-checked
-  against the platform's pre-existing worker tags. Disagreements
-  surface as re-audit candidates.
-- **Deprecated-question recovery** — questions removed from the live
-  course are still recovered from `PUBLIC_W_DELETED.COURSEV2VERSIONHISTORIES`
-  so operators know which "problems" are already resolved.
-- **LLM per-question diagnosis** — for every counterproductive
-  question, a second LLM pass classifies the root cause and
-  recommends `keep` / `rewrite` / `remove` / `investigate_grader`.
+- **Trust-weighted PDR.** Worker outcome is the fraction of a
+  worker's last three trusted reviews scoring below the promotion
+  gate. Reviews from dropped reviewers are excluded before the metric
+  is computed.
+- **Two-axis cross-validation.** Every question flag is checked
+  against a second axis — the platform's pre-existing `trusted_reviewer`
+  and `bad_quality` worker tags. Agreements are double-confirmed;
+  disagreements surface as re-audit candidates.
+- **Deprecated-question recovery.** Questions removed from the live
+  course are recovered from `PUBLIC_W_DELETED.COURSEV2VERSIONHISTORIES`
+  and stamped `deprecated=true` so operators know which flagged
+  problems are already resolved.
+- **LLM per-question diagnosis.** For every counterproductive
+  question, a second LLM pass classifies the root cause
+  (`answer_key_broken` / `trait_misalignment` / `prompt_ambiguous` /
+  `noise`) and recommends `keep` / `rewrite` / `remove` /
+  `investigate_grader`.
 
 ## Fresh-project cost
 

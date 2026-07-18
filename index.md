@@ -9,24 +9,29 @@ A repeatable pipeline that turns raw warehouse data about an OpenClaw
 project into a public-shareable set of dashboards, answering four
 operational questions:
 
-- **Workers** — who's stuck, who's producing defects, what traits predict low defect rate?
-- **Reviewers** — who can be trusted to grade work, who should be dropped?
-- **Courses** — which questions predict downstream production quality, which are counterproductive?
-- **Questions** — which specific course questions to rewrite, remove, or keep?
+- **Workers** — who is stuck in the funnel, who is producing defects,
+  which traits predict a low defect rate?
+- **Reviewers** — which reviewers can be trusted to grade work, which
+  should be dropped from the trust pool?
+- **Courses** — which courses are net-helpful vs net-harmful, and
+  which frequent worker mistakes are missing from the curriculum
+  entirely?
+- **Questions** — which specific course questions to rewrite, remove,
+  or keep (with the full question text and correct answer inline)?
 
 ## Documentation
 
 Four documents in reading order:
 
-- **[README](README.html)** — one-page overview + directory layout.
-- **[HANDOFF](HANDOFF.html)** — new maintainer, first-hour read. What
-  the system produces, what makes it unique, what the known
-  limitations are.
-- **[ONBOARDING](ONBOARDING.html)** — 10-minute walkthrough for
-  onboarding a new project. Queue YAML → `.env` → rubric → one command.
+- **[README](README.html)** — one-page overview and directory layout.
+- **[HANDOFF](HANDOFF.html)** — new-maintainer first-hour read.
+  Covers what the system produces, what makes it unique, and the
+  known limitations.
+- **[ONBOARDING](ONBOARDING.html)** — 10-minute walkthrough for a new
+  project: queue YAML → `.env` → rubric → one command.
 - **[HANDOFF_TECHNICAL](HANDOFF_TECHNICAL.html)** — deep architectural
   reference. Four layers, the 26-step canonical sequence, cost model,
-  invariants, recommended next investments.
+  invariants, and recommended next investments.
 
 ## Reference materials
 

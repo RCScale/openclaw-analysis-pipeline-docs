@@ -151,18 +151,18 @@ Related outputs:
 ### Layer 4: Presentation
 
 Ten HTML dashboards from ~5 KLOC of static-HTML generators
-(`analysis/build_*.py`). No client-side framework; the design system
-is a single CSS token file at `analysis/visualize/_assets/design.css`
-+ a vanilla-JS component library at `_assets/dashboard.js` (sortable
-tables, filterable rows, tooltip modals).
+(`analysis/build_*.py`). The design system is one CSS token file at
+`analysis/visualize/_assets/design.css` plus a vanilla-JS component
+library at `_assets/dashboard.js` (sortable tables, filterable rows,
+tooltip modals). There is no client-side framework and no build step.
 
 The rendered dashboards:
 
 - **`index.html`** — landing page with recommendations + theme tiles.
 - **`summary.html`** — printable one-pager (funnel + reviewer trust +
   per-course predictive-vs-counterproductive bar).
-- **`themes/{courses,questions,reviewers,workers}.html`** — the
-  cross-cutting workhorse pages.
+- **`themes/{courses,questions,reviewers,workers}.html`** — the four
+  cross-cutting theme pages that operators spend most time in.
 - **`g1.html`** — Goal 1: funnel + gate enforcement + KM survival +
   stuck workers.
 - **`g2.html`** + **`g2_distributions.html`** + **`g2_audit_review.html`**
@@ -257,11 +257,11 @@ that reads the CDS cache degrades. Refresh procedure is documented in
   `--json-schema` for every LLM audit. The pipeline assumes the CLI is
   on `PATH` and authenticated at machine level.
 - **Snowflake** (via Redash) — table shape documented in
-  `exploration/SCHEMA_NOTES.md`. Most critical: `taskattempts` uses
+  `exploration/SCHEMA_NOTES.md`. Most critical: the active
+  review-level column on `taskattempts` is
   `ATTEMPTED_AT_REVIEW_LEVEL` (VARIANT, `-1`/`0`/`1` for
-  annotator/L1/L2), not `REVIEW_LEVEL`. No tag-name lookup table
-  exists in the warehouse — semantic tag names must be supplied per
-  queue via the YAML.
+  annotator/L1/L2). No tag-name lookup table exists in the warehouse;
+  semantic tag names must be supplied per queue via the YAML.
 
 ### Local dependencies
 
@@ -330,21 +330,22 @@ Three "fix" commits capture the pattern:
    reviewer` only; `courses.supplementary` was ignored. Result: an
    entire course was invisible to the analysis. Fix: `Queue.all_courses`
    / `Queue.all_course_ids` properties, used everywhere.
-2. **`db7224a` — Body cache not refreshed.** `build_question_index`
-   wrote `g4_questions_with_pdr.csv` but not `g4_question_bodies.json`
-   (which dashboards read). Result: dashboards showed "question text
-   not in Q-G2 SECTIONS export" for 21 questions. Fix: build_question_index
-   now writes both.
+2. **`db7224a` — Body cache stale.** `build_question_index` wrote
+   `g4_questions_with_pdr.csv` but left `g4_question_bodies.json`
+   (which dashboards read) untouched. Result: dashboards showed
+   "question text not in Q-G2 SECTIONS export" for 21 questions.
+   Fix: `build_question_index` now writes both files in one pass.
 3. **`e9f8e0d` — Hardcoded defaults.** `run_g4 step-1 --report-date`
    defaulted to the chatv2 diagnose date; `run_g4_pdr` hardcoded
    the chatv2 tag IDs; `run_env_coverage` hardcoded a user's local
    RL envs path. Fix: auto-pick latest diagnose dir per project;
    read tags from queue; read RL envs from `RL_ENVS_DIR` env var.
 
-All three are the same underlying pattern: **stale-data-without-
-failing-the-build**. Local logic is correct at every step; the
-composition is wrong because no manifest ties outputs to
-`(project_id, queue_hash, rubric_hash, warehouse_snapshot)`.
+All three share one underlying pattern: **stale data that never
+fails the build**. Each individual step is correct in isolation, and
+the composition breaks because outputs carry no manifest binding them
+to `(project_id, queue_hash, rubric_hash, warehouse_snapshot)`.
+Recommended fix in §6.
 
 ### Cross-project bleed (still present today)
 
@@ -355,7 +356,8 @@ pipeline for project A after project B overwrites project B's outputs:
 - All `analysis/visualize/*.html`.
 - `analysis/audit_outputs/`, `audit_inputs/`, `audit_logs/`,
   `g4_mistakes/`, `g4_qdiagnose/`.
-- `analysis/g4_tag_names.csv` (fetched globally, not per-project).
+- `analysis/g4_tag_names.csv` (single global file, shared across
+  projects).
 - `pages_build/` (a single site, one project at a time).
 - The `analysis/grading_rubric.md` symlink (points at one project's
   rubric).

@@ -89,7 +89,7 @@ Fill in the 11 REQUIRED fields. The template is fully annotated; each field tell
 
 The most error-prone fields:
 
-- **`courses.reviewer`** -- exactly one course. If your project has more than one reviewer-gating course, pick the one ops manually tags promoted workers off of.
+- **`courses.reviewer`** -- exactly one course. When multiple reviewer-gating courses exist, pick the one that ops uses to decide whether to apply the promoted-reviewer tag.
 - **`tags.reviewer`** -- this is the "promoted, trusted" tag. Goal-4 PDR uses this as the "known-good" cohort for tag-separation analysis.
 - **`tags.quality_negative[0]`** -- run_g4_pdr uses the FIRST tag in this list as the "known-bad" cohort. If you have multiple negative tags, put the canonical one first (every tag still gets included in the per-tag correlation run by run_g4_traits).
 - **`review_levels`** -- the integer mapping for your project. Step 1 (e) above shows the distribution. Most OpenClaw projects: `-1/0/1`.
@@ -231,7 +231,7 @@ Add at least one known-bad tag to `tags.quality_negative` in your YAML, or accep
 
 ### LLM steps (C4, C11, C12, C22) fail with `claude: command not found`
 
-Install the Claude CLI (`pip install claude` or your team's wrapper) and confirm with `claude --version`.
+Install the Claude CLI with `npm install -g @anthropic-ai/claude-code`, authenticate with `claude login`, and confirm with `claude --version`. The pipeline requires the CLI on `PATH` — the Python `anthropic` SDK is not sufficient.
 
 ### Pages build (`analysis.build_for_pages`) has a 100 MB file
 
