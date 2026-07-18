@@ -3,7 +3,7 @@
 Companion to [HANDOFF.md](./HANDOFF.md). This document covers:
 
 1. Architecture (four layers + the data-trust chain).
-2. The 26-step canonical sequence, with what reads/writes what.
+2. The 27-step canonical sequence, with what reads/writes what.
 3. External dependencies and secrets.
 4. Cost model.
 5. Known invariants and failure modes.
@@ -113,7 +113,9 @@ None of these directories are project-namespaced today — see §5
 
 ### Layer 3: Analytics
 
-Pure Python (stdlib only; no pandas). Split across ~10 modules under
+Pure Python with no pandas / numpy / dataframes. The only non-stdlib
+imports in Layer 3 are `pyyaml` (queue loading) and the standard
+`csv` / `json` / `statistics` modules. Split across ~10 modules under
 `analysis/run_g4_*.py` + `analysis/lib/*.py`.
 
 Key output: `analysis/g4_question_predictive.csv`. Every row is a
@@ -150,7 +152,7 @@ Related outputs:
 
 ### Layer 4: Presentation
 
-Ten HTML dashboards from ~5 KLOC of static-HTML generators
+Fourteen HTML dashboards from ~5 KLOC of static-HTML generators
 (`analysis/build_*.py`). The design system is one CSS token file at
 `analysis/visualize/_assets/design.css` plus a vanilla-JS component
 library at `_assets/dashboard.js` (sortable tables, filterable rows,
@@ -161,8 +163,16 @@ The rendered dashboards:
 - **`index.html`** — landing page with recommendations + theme tiles.
 - **`summary.html`** — printable one-pager (funnel + reviewer trust +
   per-course predictive-vs-counterproductive bar).
-- **`themes/{courses,questions,reviewers,workers}.html`** — the four
-  cross-cutting theme pages that operators spend most time in.
+- **`themes/courses.html`** — per-course net-helpful vs net-harmful
+  ranking, plus mistake-cluster coverage gaps (which frequent worker
+  mistakes are absent from the curriculum).
+- **`themes/questions.html`** — per-question rewrite / remove / keep
+  action table with full question body, correct answer, PDR
+  statistics, and the LLM diagnosis for every flagged item.
+- **`themes/reviewers.html`** — reviewer trust scores, who was
+  dropped, and the audit evidence that supports each drop.
+- **`themes/workers.html`** — funnel-stuck workers and trait
+  predictors of low defect rate.
 - **`g1.html`** — Goal 1: funnel + gate enforcement + KM survival +
   stuck workers.
 - **`g2.html`** + **`g2_distributions.html`** + **`g2_audit_review.html`**
@@ -180,7 +190,7 @@ viewer (100 MB with raw feedback embedded).
 
 ---
 
-## 2. The 26-step canonical sequence
+## 2. The 27-step canonical sequence
 
 Run via `python3 -m analysis.run_all --queue queues/<project_id>.yaml`.
 Each step is a `subprocess.run` of the next canonical module.
@@ -212,19 +222,27 @@ Each step is a `subprocess.run` of the next canonical module.
 | C19 | `analysis.run_g4_q_subsets` | 1 min | — |
 | C20 | `analysis.run_g4_qdiagnose extract` | 20 s | — |
 | C21 | `analysis.run_g4_qdiagnose stats` | 10 s | — |
+| C21b | `analysis.run_g3_production_validity` | 10 s | — |
 | **C22** | **`analysis.run_g4_qdiagnose diagnose` (LLM)** | **5-10 min** | **~$30** |
 | C23 | `analysis.build_question_index` | 30 s | — |
-| D | `analysis.build_all_dashboards --skip-goals` | 3 s | — |
+| D | `analysis.build_all_dashboards --skip-goals` | ~3 s | — |
 
 **Fresh-project totals:** ~25-40 minutes wall time, ~$365 LLM cost.
-**Presentation-only re-run** (edit copy, tweak layout): ~3 seconds.
-**Data refresh with existing audits cached**: ~5 minutes, ~$30-$50
-(the LLM sub-layers cache per-attempt / per-question, so only new
-records incur cost).
+
+**Presentation-only re-run** (edit copy, tweak layout): ~3 seconds via
+`python3 -m analysis.build_all_dashboards --skip-goals`.
+
+**Data refresh with existing G2 audit cache preserved:** ~5 minutes
+wall time. Cost floor is ~$35 for the two G4 mistake-clustering LLM
+steps (C11 and C12), which re-cluster from scratch on every run.
+Everything else is per-record cached, so cost adds ~$1.50 per new
+sampled review (C4) plus ~$3 per newly-flagged predictive or
+counterproductive question (C22).
 
 Every C-step reads from and writes to the `analysis/` directory.
-Steps marked `always=True` in `run_all.py` never skip (currently:
-B2, C10, C20, C21, C22, D). Everything else is checkpointed by mtime.
+Steps marked `always=True` in `run_all.py` never skip
+(currently: B2, C10, C20, C21, C21b, C22, D). Everything else is
+checkpointed by mtime.
 
 ---
 
@@ -419,8 +437,9 @@ blocking a third-project onboarding.
 Everything below varies per project. Everything else in the codebase
 is project-independent.
 
-- `queues/<project_id>.yaml` — 11 required fields (see
-  `queues/_TEMPLATE.yaml`).
+- `queues/<project_id>.yaml` — nine top-level REQUIRED blocks (see
+  `queues/_TEMPLATE.yaml`; each block has REQUIRED leaves annotated
+  inline).
 - `analysis/rubrics/<project_id>_<slug>.md` — the LLM auditor's
   rubric for this project.
 - `.env` — three or four secrets, none project-specific but rotated

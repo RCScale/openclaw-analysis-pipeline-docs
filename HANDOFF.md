@@ -26,11 +26,17 @@ as a redacted public mirror.
 
 For each project, running the pipeline end-to-end produces:
 
-- **10 HTML dashboards** under `analysis/visualize/` — an overview
-  landing page, a printable executive summary, four cross-cutting theme
-  pages (Courses / Questions / Reviewers / Workers), five deep-dive
-  pages for methodology and raw tables, plus an audit-evidence viewer
-  with the reviewed material inline.
+- **14 HTML dashboards** under `analysis/visualize/`:
+  - Landing portal (`index.html`), printable executive summary
+    (`summary.html`), and audit-evidence viewer
+    (`g2_audit_review.html`) — 3 entry points.
+  - Four cross-cutting theme pages
+    (`themes/courses.html`, `themes/questions.html`,
+    `themes/reviewers.html`, `themes/workers.html`) that operators
+    spend most time in.
+  - Seven per-goal deep-dives (`g1.html`, `g2.html`,
+    `g2_distributions.html`, `g3.html`, `g3_production_validity.html`,
+    `g4.html`, `g_universe_coverage.html`).
 - **~30 CSV / JSON analysis artifacts** under `analysis/g*_*` covering
   every intermediate output (trust scores, per-question predictivity,
   mistake clusters, per-worker outcomes, tag correlations).
@@ -79,7 +85,7 @@ For each project, running the pipeline end-to-end produces:
   (`ONBOARDING.md`).
 - Committed fetch scripts for every raw warehouse pull; no ad-hoc
   Redash queries required to onboard.
-- Orchestrator (`analysis.run_all`) that runs the canonical 26-step
+- Orchestrator (`analysis.run_all`) that runs the canonical 27-step
   sequence with `--from`, `--only`, `--skip`, `--skip-llm`,
   `--force`, `--dry-run` flags. Mtime-based checkpointing to skip
   already-fresh steps.
@@ -94,8 +100,8 @@ For each project, running the pipeline end-to-end produces:
 
 ### Known limitations (in priority order)
 
-- **Derived artifacts are global, not project-namespaced.** Files under
-  `analysis/g*_*.csv`, `analysis/audit_outputs/`, and
+- **Derived artifacts share one global filesystem namespace.** Files
+  under `analysis/g*_*.csv`, `analysis/audit_outputs/`, and
   `analysis/visualize/` are shared across projects; switching queues
   overwrites the previous project's output. Today's workaround: the
   `archive_project.sh` script snapshots to `archive/<project_id>/`
@@ -111,11 +117,11 @@ For each project, running the pipeline end-to-end produces:
   payload downloads (used by G2 phase-b audits and env-coverage)
   return HTTP 401 when the JWT expires. Refresh is manual; there is
   no automatic re-auth path.
-- **LLM caches are keyed by attempt ID, not project ID.** Per-attempt
-  audit outputs at `analysis/audit_outputs/<attempt_id>.json` carry
-  no project ID prefix. If two projects share an attempt ID (rare in
-  practice), the audit from the first project will be reused for the
-  second.
+- **LLM caches are keyed only by attempt ID.** Per-attempt audit
+  outputs at `analysis/audit_outputs/<attempt_id>.json` carry no
+  project ID prefix. If two projects share an attempt ID (rare in
+  practice), whichever project wrote the cached audit first wins
+  and the other project silently reuses it.
 - **Presentation builders do not accept `--queue`.**
   `build_themes.py`, `build_summary.py`, and `build_g4_dashboard.py`
   read whatever `analysis/g4_*.csv` is on disk. Combined with the
@@ -123,8 +129,11 @@ For each project, running the pipeline end-to-end produces:
   archive-and-restore workflow exists.
 - **Cost surface is high on a fresh run.** ~$365 in Claude API calls
   per fresh project (see cost breakdown in `HANDOFF_TECHNICAL.md`
-  §4). LLM steps have per-attempt or per-question caches, so refreshes
-  after new data land cost $0–$30 depending on what changed.
+  §4). Two of the four LLM steps (mistake clustering step-4b and 4c)
+  re-cluster from scratch every run, so data refreshes have a ~$35
+  floor. The other two steps (G2 phase-b reviewer audit, G4
+  qdiagnose) cache per-attempt / per-question and add cost only for
+  new records.
 
 ## Where to go from here
 
@@ -165,7 +174,7 @@ For each project, running the pipeline end-to-end produces:
 
   analysis/                    everything downstream of the warehouse
     fetch_raw.py               Q-F, Q-G1, Q-G2, G4 traits + tag pulls
-    run_all.py                 top-level orchestrator (26-step sequence)
+    run_all.py                 top-level orchestrator (27-step sequence)
     run_g1.py                  funnel + gates + KM survival curves
     run_g2.py                  reviewer sampling + LLM audit + trust
     run_g3.py                  course psychometrics (CTT)

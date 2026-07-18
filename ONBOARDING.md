@@ -72,8 +72,8 @@ Fill in:
 Verify it loaded:
 
 ```bash
-python3 -c "from pipeline.lib.redash import _load_api_key; print(bool(_load_api_key()))"
-# expected: True
+python3 -c "from dotenv import load_dotenv; import os; load_dotenv(); print('REDASH:', bool(os.getenv('REDASH_API_KEY')), 'JWT:', bool(os.getenv('SCALE_DASHBOARD_JWT')))"
+# expected: REDASH: True JWT: True
 ```
 
 ---
@@ -85,7 +85,7 @@ cp queues/_TEMPLATE.yaml queues/<your_project_id>.yaml
 $EDITOR queues/<your_project_id>.yaml
 ```
 
-Fill in the 11 REQUIRED fields. The template is fully annotated; each field tells you which Step-1 SQL result to paste.
+Fill in every field the template marks `REQUIRED`. There are nine top-level REQUIRED blocks (`project_id`, `analysis_window`, `team_email_patterns`, `courses`, `tags`, `review_levels`, `promotion`, `json_step_map`, `warehouse`), each with its own REQUIRED leaves annotated inline. Any missing REQUIRED field raises a clear `ValueError` from `Queue.load` — no silent defaults.
 
 The most error-prone fields:
 
@@ -146,8 +146,10 @@ python3 -m analysis.run_all --queue queues/<pid>.yaml --from C6
 Skip the LLM-bound steps (useful when iterating on presentation):
 
 ```bash
-python3 -m analysis.run_all --queue queues/<pid>.yaml --skip C4 C11 C12 C22
+python3 -m analysis.run_all --queue queues/<pid>.yaml --skip-llm
 ```
+
+`--skip-llm` drops every step flagged `llm=True` in the plan, so it never drifts if a new LLM step is added.
 
 ---
 
@@ -164,7 +166,6 @@ python3 -m analysis.run_all --queue queues/<pid>.yaml --skip C4 C11 C12 C22
 | C4 | `analysis.run_g2 phase-b` | **15-25 min** | **~$300** | LLM audits 200 sampled reviews in parallel. |
 | C5 | `analysis.run_g2 phase-c` | 10 s | -- | Aggregates audit verdicts. |
 | C6 | `analysis.run_g3` | 30 s | -- | Per-course / per-question psychometrics. |
-| C7 | `analysis.run_g3_production_validity` | 10 s | -- | Phase D production validity scatter. |
 | C8 | `analysis.run_g4 step-1` | 20 s | -- | Trust filter + materialize trusted reviews. |
 | C8b | `analysis.fetch_raw --phase post-trust` | 1 min | -- | G4 traits + baseline for the trusted cohort. |
 | C9 | `analysis.run_g4 step-2` | 1-2 min | -- | Per-question PDR predictivity. |
@@ -179,12 +180,14 @@ python3 -m analysis.run_all --queue queues/<pid>.yaml --skip C4 C11 C12 C22
 | C19 | `analysis.run_g4_q_subsets` | 1 min | -- | Per-course subset search. |
 | C20 | `analysis.run_g4_qdiagnose extract` | 20 s | -- | Per-question evidence collection. |
 | C21 | `analysis.run_g4_qdiagnose stats` | 10 s | -- | Fisher z CIs back into the predictive CSV. |
+| C21b | `analysis.run_g3_production_validity` | 10 s | -- | Joins G3 psychometrics with G4 predictive to render PDR-anchored discrimination scatter. Depends on C21's Fisher CIs. |
 | C22 | `analysis.run_g4_qdiagnose diagnose` | **5-10 min** | **~$30** | LLM diagnoses each predictive/counterproductive question. |
 | C23 | `analysis.build_question_index` | 30 s | -- | Final g4_questions_with_pdr.csv with deprecated tag. |
-| D | `analysis.build_all_dashboards` | 1 min | -- | Renders every dashboard HTML. |
+| D | `analysis.build_all_dashboards --skip-goals` | ~3 s | -- | Re-renders the top-level presentation (portal, themes, summary, audit viewer, G4 dashboard) using CSVs from the C-steps above. The per-goal HTMLs (g1/g2/g3/g4/env_coverage) were emitted directly by their C-step. |
 
 **Total wall time:** ~25-40 minutes for a fresh project.
-**Total LLM cost:** **~$365** per fresh run. Most of this is the G2 phase-b audit; that cache survives across reruns of every downstream step (`analysis/audit_outputs/`).
+
+**Total LLM cost:** **~$365** per fresh run — ~$300 for the G2 phase-b reviewer audit, ~$35 for the G4 mistake-clustering pair (C11 + C12), and ~$30 for the per-question G4 qdiagnose (C22). The G2 audit and G4 qdiagnose caches survive across reruns (`analysis/audit_outputs/` and `analysis/g4_question_diagnoses.json`); the mistake-clustering steps have no cache today, so a data refresh has a ~$35 floor.
 
 ---
 

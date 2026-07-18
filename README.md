@@ -34,11 +34,13 @@ The chatv2 project is fully onboarded. Its rendered dashboards live at
 To reproduce locally:
 
 ```bash
-# 1. Restore the archived outputs for chatv2 (this workspace was cleaned
-#    to code-only; chatv2 outputs sit in archive/).
+# 1. Restore the archived outputs for chatv2 (this workspace ships
+#    code-only; chatv2 outputs live in archive/).
 rsync -av archive/698318a45989d90bf44b9b53/ ./
 
-# 2. Point the rubric symlink at the chatv2 rubric and preview the site.
+# 2. --dry-run runs the "point the rubric symlink" side effect and
+#    prints the plan without executing steps. The rendered HTML is
+#    already inside the restored archive, so no rebuild is needed.
 python3 -m analysis.run_all --queue queues/698318a45989d90bf44b9b53.yaml --dry-run
 python3 -m http.server --directory analysis/visualize 8000
 ```
@@ -51,9 +53,9 @@ To onboard a new project: see [`ONBOARDING.md`](./ONBOARDING.md).
 queues/          per-project YAML config
 pipeline/        warehouse-pull layer (SQL, Redash + CDS clients, diagnose FSM)
 analysis/        everything downstream: fetch, LLM audits, math, presentation
-  run_all.py     orchestrator (26-step canonical sequence)
+  run_all.py     orchestrator (27-step canonical sequence)
   rubrics/       per-project grading rubric
-  visualize/     rendered HTML output
+  visualize/     rendered HTML output (14 dashboards total)
     _assets/     shared design system (CSS + JS)
 reports/         per-project warehouse data (gitignored)
 archive/         per-project snapshots (gitignored)
@@ -77,15 +79,20 @@ pages_build/     redacted public mirror (separate git repo)
   course are recovered from `PUBLIC_W_DELETED.COURSEV2VERSIONHISTORIES`
   and stamped `deprecated=true` so operators know which flagged
   problems are already resolved.
-- **LLM per-question diagnosis.** For every counterproductive
-  question, a second LLM pass classifies the root cause
-  (`answer_key_broken` / `trait_misalignment` / `prompt_ambiguous` /
-  `noise`) and recommends `keep` / `rewrite` / `remove` /
+- **LLM per-question diagnosis.** For every question flagged as
+  predictive or counterproductive, a second LLM pass classifies the
+  root cause (`answer_key_broken` / `trait_misalignment` /
+  `prompt_ambiguous` / `noise_or_low_signal` / `genuinely_predictive`)
+  and recommends `keep` / `rewrite` / `remove` /
   `investigate_grader`.
 
 ## Fresh-project cost
 
-- ~25-40 minutes wall clock
-- ~$365 in Claude API calls (mostly the 200-review audit; per-attempt
-  cached for re-runs)
-- ~$0 Snowflake compute
+- ~25-40 minutes wall clock.
+- ~$365 in Claude API calls. The 200-review G2 audit is the largest
+  slice at ~$300 and is cached per-attempt (re-runs after new data
+  land pay only for new attempts).
+- ~$0 Snowflake compute.
+- Data refreshes (fresh warehouse pull, existing G2 audit cache
+  reused) still pay a ~$35 floor for the two G4 mistake-clustering
+  LLM steps, which re-cluster from scratch every run.
