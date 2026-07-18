@@ -1,23 +1,31 @@
 <!-- Mermaid diagram support.
 
-     kramdown + rouge renders ```mermaid fences as
-       <div class="language-mermaid highlighter-rouge">
-         <div class="highlight"><pre class="highlight"><code>...</code></pre></div>
-       </div>
+     kramdown (without rouge highlighting the mermaid language) emits
+     ```mermaid fences as bare:
 
-     Mermaid's own auto-init looks for <div class="mermaid">...</div>, so we
-     replace the rouge-emitted markup with a bare .mermaid container before
+       <pre><code class="language-mermaid">flowchart LR ...</code></pre>
+
+     Mermaid's own auto-init only picks up <div class="mermaid">...</div>,
+     so we replace the <pre> wrapper with a bare .mermaid container before
      calling mermaid.run(). -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('div.language-mermaid').forEach(function (el) {
-      var code = el.querySelector('code');
+    // Target both the plain kramdown output (pre > code.language-mermaid)
+    // and the rouge-wrapped output (div.language-mermaid ...), so this
+    // works regardless of syntax_highlighter setting.
+    var nodes = document.querySelectorAll(
+      'pre > code.language-mermaid, div.language-mermaid'
+    );
+    nodes.forEach(function (el) {
+      var code = el.matches('code') ? el : el.querySelector('code');
       var text = (code ? code.textContent : el.textContent).trim();
       var container = document.createElement('div');
       container.className = 'mermaid';
       container.textContent = text;
-      el.parentNode.replaceChild(container, el);
+      // If we matched the inner <code>, replace its <pre> parent.
+      var replaceTarget = el.tagName === 'CODE' ? el.parentNode : el;
+      replaceTarget.parentNode.replaceChild(container, replaceTarget);
     });
     if (typeof mermaid !== 'undefined') {
       mermaid.initialize({
