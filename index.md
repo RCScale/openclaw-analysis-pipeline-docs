@@ -21,17 +21,23 @@ operational questions:
 
 ## Documentation
 
-Four documents in reading order:
+Five documents. Pick your entry point:
 
+- **[REFERENCE](REFERENCE.html)** — start here if you are building
+  your own pipeline and using this repo as a design reference. Covers
+  the four questions, the trust chain, what to lift, and what we
+  would do differently.
 - **[README](README.html)** — one-page overview and directory layout.
-- **[HANDOFF](HANDOFF.html)** — new-maintainer first-hour read.
-  Covers what the system produces, what makes it unique, and the
-  known limitations.
-- **[ONBOARDING](ONBOARDING.html)** — 10-minute walkthrough for a new
-  project: queue YAML → `.env` → rubric → one command.
-- **[HANDOFF_TECHNICAL](HANDOFF_TECHNICAL.html)** — deep architectural
-  reference. Four layers, the 26-step canonical sequence, cost model,
-  invariants, and recommended next investments.
+- **[HANDOFF](HANDOFF.html)** — first-hour read for someone
+  inheriting this codebase. Covers what the system produces, what
+  makes it unique, and the known limitations.
+- **[ONBOARDING](ONBOARDING.html)** — 10-minute walkthrough for a
+  new project against the existing pipeline: queue YAML → `.env` →
+  rubric → one command.
+- **[HANDOFF_TECHNICAL](HANDOFF_TECHNICAL.html)** — deep
+  architectural reference. Four layers, the 27-step canonical
+  sequence, cost model, invariants, and recommended next
+  investments.
 
 ## Reference materials
 

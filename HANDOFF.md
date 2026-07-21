@@ -1,5 +1,10 @@
 # Handoff: OpenClaw Analysis Pipeline
 
+> If you are building your own version of this pipeline and just
+> want a design reference, read [REFERENCE.md](./REFERENCE.md)
+> instead. That doc covers the design decisions and transferable
+> patterns. This one is written for someone inheriting the code as-is.
+
 ## What this is
 
 A repeatable pipeline that turns raw warehouse data about an OpenClaw

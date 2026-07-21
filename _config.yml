@@ -16,6 +16,7 @@ relative_links:
   collections: true
 include:
   - README.md
+  - REFERENCE.md
   - HANDOFF.md
   - HANDOFF_TECHNICAL.md
   - ONBOARDING.md

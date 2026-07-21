@@ -15,11 +15,16 @@ operational questions:
 
 ## Start here
 
-- **New to the pipeline?** Read [`HANDOFF.md`](./HANDOFF.md). One page,
-  answers "what is this / what does it produce / what are the
-  limitations".
-- **Onboarding a new project?** Read [`ONBOARDING.md`](./ONBOARDING.md).
-  10-minute walkthrough: queue YAML → `.env` → rubric → one command.
+- **Using this as a reference to build your own pipeline?** Read
+  [`REFERENCE.md`](./REFERENCE.md) first. It covers the design
+  decisions, the trust chain, what to lift, and what we would do
+  differently.
+- **Inheriting this codebase to operate?** Read
+  [`HANDOFF.md`](./HANDOFF.md). One-page overview of what the system
+  produces and its known limitations.
+- **Onboarding a new project to the existing pipeline?** Read
+  [`ONBOARDING.md`](./ONBOARDING.md). 10-minute walkthrough: queue
+  YAML → `.env` → rubric → one command.
 - **Need architectural depth?** Read
   [`HANDOFF_TECHNICAL.md`](./HANDOFF_TECHNICAL.md). Every layer, every
   entrypoint, the cost model, invariants, and recommended next
