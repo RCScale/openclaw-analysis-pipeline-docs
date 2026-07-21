@@ -45,36 +45,16 @@ rejected".
 The single most important design decision in the pipeline is the
 trust chain. Everything downstream depends on it being sound.
 
-```
-raw reviewer feedback  (Q-C from warehouse + CDS payload)
-   |  LLM audits each claim in each feedback comment
-   v  (Claude Opus, --effort max, --json-schema)
-per-claim verdicts  (defensible / questionable / unjustified)
-   |  majority-unjustified reviewers dropped from the trust pool
-   v
-trusted reviewer set
-   |  filter raw reviews to those written by trusted reviewers
-   v
-trusted review corpus
-   |  compute per-worker PDR from last 3 trusted reviews
-   v
-per-worker PDR
-   |  point-biserial correlate PDR with per-question performance
-   v  during onboarding
-per-question predictivity  (r_pdr with Fisher-z CIs)
-   |  cross-validate against platform's own worker tags
-   v  (trusted_reviewer, bad_quality)
-double-confirmed question flags
-   |  LLM diagnoses each flagged question
-   v  (root cause + recommended action)
-per-question keep / rewrite / remove / investigate_grader
-```
+![Trust chain diagram: raw reviewer feedback flows through an LLM claim audit, produces per-claim verdicts, filters to a trusted reviewer set and trusted review corpus, feeds per-worker PDR, then per-question predictivity, then two-axis cross-validated flags, and finally per-question keep / rewrite / remove actions from a second LLM diagnosis pass.](./assets/trust_chain.png)
 
-Every hop is drillable end-to-end from the dashboards: click a
-question recommendation → source reviews for that question, click a
-reviewer trust score → the audit evidence that dropped them. This
-transparency is what makes operations-team stakeholders willing to
-act on the LLM outputs.
+The two LLM passes (claim audit at the top, per-question diagnosis at
+the bottom) sit at the boundaries of the chain; everything in between
+is deterministic statistics on filtered data. Every hop is drillable
+end-to-end from the dashboards — click a question recommendation to
+see the source reviews for that question, click a reviewer trust
+score to see the audit evidence that dropped them. This transparency
+is what makes operations-team stakeholders willing to act on the LLM
+outputs.
 
 ---
 
